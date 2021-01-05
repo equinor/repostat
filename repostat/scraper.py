@@ -1,22 +1,58 @@
 import argparse
+import time
+
 from github import Github
 from github.GithubException import UnknownObjectException
 
 
 def scrape(github, org):
     git_org = github.get_organization(org)
-    repos = git_org.get_repos()
-    print(repos.totalCount)
+    org_members = get_organization_members(git_org)
+
+    repos = git_org.get_repos(type='public')
+    print(f'Number of repositories: {repos.totalCount}')
+
     for repo in repos:
-        name = repo.full_name
+        name = repo.name
+        contributors = repo.get_stats_contributors()
+        internal = 0
+        external = 0
+        for contributor in contributors:
+            if contributor.author in org_members:
+                internal += 1
+            else:
+                external += 1
+
+        updated_at = repo.updated_at
         try:
-            license = repo.get_license()
+            license_type = repo.get_license()
+            license_type = license_type.license.name
         except UnknownObjectException:
-            license = 'Unknown'
-        print(f'{name} {license}')
+            license_type = 'Unknown'
+
+        print(f'{name}')
+        print(f'\tLicense: {license_type}')
+        print(f'\tLast updated: {updated_at}')
+        print(f'\tContributor ratio (internal/external): {internal}/{external}')
+
+
+def get_organization_members(git_org):
+    members = git_org.get_members()
+    org_members = []
+    for member in members:
+        org_members.append(member)
+    return org_members
+
+
+def check_rate():
+    global crate
+    rate = github.get_rate_limit()
+    crate = rate.core
+    print(f'GitHub remaining queries: {crate.remaining} reset at: {crate.reset}')
 
 
 if __name__ == '__main__':
+    now = time.time()
     parser = argparse.ArgumentParser(description='GitHub repository scraper.',
                                      allow_abbrev=True)
     parser.add_argument('organization', type=str, nargs=1,
@@ -38,8 +74,7 @@ if __name__ == '__main__':
         user, password = args.user_pass[0]
         github = Github(user, password)
 
-    rate = github.get_rate_limit()
-    crate = rate.core
-    print(f'GitHub remaining queries: {crate.remaining} reset at: {crate.reset}')
+    check_rate()
     scrape(github, org)
-    print(f'GitHub remaining queries: {crate.remaining} reset at: {crate.reset}')
+    check_rate()
+    print(f'Running time: {time.time() - now:.2f} seconds')
