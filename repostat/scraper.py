@@ -5,14 +5,19 @@ from github import Github
 from github.GithubException import UnknownObjectException
 
 
-def scrape(github, org):
+def scrape(github, org, count=None):
     git_org = github.get_organization(org)
     org_members = get_organization_members(git_org)
 
     repos = git_org.get_repos(type='public')
     print(f'Number of repositories: {repos.totalCount}')
 
-    for repo in repos:
+    if count:
+        count = min(count, repos.totalCount)
+    else:
+        count = repos.totalCount
+
+    for repo in repos[:count]:
         name = repo.name
         contributors = repo.get_stats_contributors()
         internal = 0
@@ -57,6 +62,10 @@ if __name__ == '__main__':
                                      allow_abbrev=True)
     parser.add_argument('organization', type=str, nargs=1,
                         help='name of the organization to scrape')
+
+    parser.add_argument('--count', type=int, nargs=1, default=None,
+                        help='only scrape COUNT number of repositories')
+
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--token', dest='token', type=str, nargs=1,
                        help='GitHub access token')
@@ -65,16 +74,23 @@ if __name__ == '__main__':
                        metavar=('USER', 'PASS'),
                        help='GitHub username and password')
 
+    group.add_argument('--anonymous', dest='user_pass', action='store_const',
+                       metavar=('USER', 'PASS'), const=('anon', 'nopass'),
+                       help='GitHub username and password')
+
     args = parser.parse_args()
 
     org = args.organization[0]
-    if args.token[0]:
+
+    count = args.count[0] if args.count else None
+
+    if args.token:
         github = Github(args.token[0])
     else:
-        user, password = args.user_pass[0]
+        user, password = args.user_pass
         github = Github(user, password)
 
     check_rate()
-    scrape(github, org)
+    scrape(github, org, count=count)
     check_rate()
     print(f'Running time: {time.time() - now:.2f} seconds')
